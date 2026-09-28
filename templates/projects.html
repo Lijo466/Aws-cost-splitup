@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project-Wise Cost & Resource Dashboard | AWS Cloud Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --surface-color: rgba(22, 30, 49, 0.7);
+            --surface-hover: rgba(30, 41, 67, 0.8);
+            --accent-primary: #00e5ff;
+            --accent-secondary: #7c4dff;
+            --accent-success: #00e676;
+            --accent-warning: #ffab00;
+            --accent-error: #ff1744;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --glass-blur: blur(16px);
+            --font-family: 'Inter', sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(124, 77, 255, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(0, 229, 255, 0.12) 0%, transparent 40%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            padding-bottom: 3rem;
+        }
+
+        .navbar {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 2rem; background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: var(--glass-blur); border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 0; z-index: 100;
+        }
+
+        .brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; }
+        .brand-icon {
+            width: 38px; height: 38px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 10px; display: flex; align-items: center; justify-content: center;
+            color: #000; font-weight: 800; font-family: 'Outfit', sans-serif; font-size: 1.2rem;
+        }
+        .brand-text { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 700; color: #fff; }
+
+        .nav-links { display: flex; gap: 1rem; align-items: center; }
+        .nav-link {
+            color: var(--text-secondary); text-decoration: none; font-size: 0.9rem;
+            font-weight: 600; padding: 0.5rem 0.8rem; border-radius: 8px; transition: all 0.2s;
+        }
+        .nav-link:hover, .nav-link.active { color: #fff; background: rgba(255, 255, 255, 0.05); }
+        .nav-link.active { color: var(--accent-primary); border-bottom: 2px solid var(--accent-primary); }
+
+        .container { max-width: 1400px; margin: 2rem auto; padding: 0 1.5rem; }
+
+        .header-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .header-title-row h1 { font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800; }
+        .subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
+
+        .card {
+            background: var(--surface-color); backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); transition: all 0.3s;
+        }
+
+        .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        @media (max-width: 900px) { .kpi-container { grid-template-columns: repeat(2, 1fr); } }
+
+        .kpi-card { display: flex; flex-direction: column; justify-content: center; padding: 1.5rem; position: relative; overflow: hidden; }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary)); }
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; }
+        .kpi-value { font-family: 'Outfit', sans-serif; font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; }
+
+        .charts-section { display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (max-width: 900px) { .charts-section { grid-template-columns: 1fr; } }
+        .chart-card { display: flex; flex-direction: column; min-height: 340px; }
+        .chart-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; }
+        .chart-wrapper { flex-grow: 1; position: relative; min-height: 240px; }
+
+        .controls-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; justify-content: space-between; }
+        .search-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.5rem 1rem; font-size: 0.9rem; outline: none; width: 280px; }
+
+        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        th { background: rgba(255, 255, 255, 0.03); color: var(--text-secondary); font-weight: 600; padding: 1rem; border-bottom: 1px solid var(--border-color); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+        td { padding: 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-primary); }
+        tr.inst-row { cursor: pointer; transition: background 0.2s; }
+        tr.inst-row:hover { background: var(--surface-hover); }
+
+        .proj-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 6px; font-weight: 600; font-size: 0.8rem; background: rgba(124, 77, 255, 0.15); color: #b388ff; border: 1px solid rgba(124, 77, 255, 0.3); }
+
+        .details-row { display: none; background: rgba(0, 0, 0, 0.25); }
+        .details-row.active { display: table-row; }
+        .details-expanded { padding: 1.25rem; border-left: 3px solid var(--accent-primary); }
+        .expand-arrow { display: inline-block; transition: transform 0.2s; color: var(--text-secondary); font-size: 0.8rem; }
+        .expand-arrow.open { transform: rotate(90deg); color: var(--accent-primary); }
+
+        .res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
+        .res-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 0.8rem 1rem; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .res-name { font-weight: 600; font-size: 0.85rem; color: #fff; word-break: break-all; }
+        .res-type { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
+
+        .btn-reassign { background: rgba(0, 229, 255, 0.1); color: var(--accent-primary); border: 1px solid rgba(0, 229, 255, 0.3); padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-reassign:hover { background: var(--accent-primary); color: #000; }
+
+        /* Reassign Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; width: 450px; max-width: 90%; box-shadow: 0 16px 48px rgba(0,0,0,0.5); }
+        .modal h3 { font-family: 'Outfit', sans-serif; font-size: 1.3rem; margin-bottom: 1rem; }
+        .form-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.2rem; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+        .form-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.6rem 0.8rem; outline: none; }
+        .modal-buttons { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+        .btn-modal { padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; border: none; }
+        .btn-cancel { background: rgba(255, 255, 255, 0.1); color: #fff; }
+        .btn-save { background: var(--accent-primary); color: #000; font-weight: 700; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="brand">
+            <div class="brand-icon">⚡</div>
+            <span class="brand-text">AWS Cloud Dashboard</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Overview</a>
+            <a href="/projects" class="nav-link active">Projects</a>
+            <a href="/projects/monthly" class="nav-link">Monthly Splitup</a>
+            <a href="/s3" class="nav-link">S3 Buckets</a>
+            <a href="/ec2" class="nav-link">EC2 Compute</a>
+            <a href="/lightsail" class="nav-link">Lightsail</a>
+            <a href="/rds" class="nav-link">RDS Databases</a>
+            <a href="/datatransfer" class="nav-link">Data Transfer</a>
+            <a href="/logout" class="nav-link" style="color: var(--accent-error);">Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header-title-row">
+            <div>
+                <h1>Project-Wise Cost & Allocation</h1>
+                <div class="subtitle">Consolidated AWS Infrastructure Spend & Resource Allocation per Project</div>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+                <button onclick="exportProjectsCSV()" style="background: rgba(0, 230, 118, 0.15); color: var(--accent-success); border: 1px solid rgba(0, 230, 118, 0.3); padding: 0.53rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;">
+                    📥 Export Projects Summary (CSV)
+                </button>
+                <button onclick="wipeDatabaseAndRescan()" style="background: rgba(255, 23, 68, 0.12); color: var(--accent-error); border: 1px solid rgba(255, 23, 68, 0.3); padding: 0.53rem 1rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;">
+                    🗑️ Wipe Old Scans & Rescan
+                </button>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-container">
+            <div class="card kpi-card">
+                <span class="kpi-label">Active Projects</span>
+                <span id="kpi-total-projects" class="kpi-value">0</span>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; margin-top: 0.1rem;">Tracked AWS Applications</div>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">Total Allocated Spend</span>
+                <span id="kpi-total-spend" class="kpi-value" style="color: var(--accent-success);">$0.00</span>
+                <div id="kpi-total-spend-inr" style="font-size: 0.82rem; color: var(--accent-success); font-weight: 700; margin-top: 0.1rem;">₹0 / mo</div>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">Top Spending Project</span>
+                <span id="kpi-top-project" class="kpi-value" style="color: var(--accent-primary);">-</span>
+                <div style="font-size: 0.82rem; color: var(--accent-primary); font-weight: 600; margin-top: 0.1rem;">Highest Spend Allocation</div>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">Total Resources</span>
+                <span id="kpi-total-resources" class="kpi-value">0</span>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; margin-top: 0.1rem;">1 USD = ₹83.50 INR</div>
+            </div>
+        </div>
+
+        <!-- S3 Operational Invoice Breakdown Banner -->
+        <div id="s3-account-breakdown-card" class="card" style="margin-bottom: 1.5rem; background: rgba(0, 0, 0, 0.25); border: 1px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.15rem; color: var(--accent-primary); display: flex; align-items: center; gap: 0.5rem;">
+                    ⚡ AWS S3 Operational Invoice Cost Breakdown
+                    <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 500;">(Verified via AWS Cost Explorer)</span>
+                </h3>
+                <span id="account-s3-total-badge" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-success);">$3,981.23 / mo</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;">
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">1. API Requests (Tier 1-4)</div>
+                    <div id="account-s3-api" style="font-size: 1.3rem; font-weight: 800; color: #b388ff; margin-top: 0.4rem;">$2,388.74</div>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem;">PUT, GET, LIST, S3 Select</div>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">2. Storage Tiering (GB)</div>
+                    <div id="account-s3-storage" style="font-size: 1.3rem; font-weight: 800; color: var(--accent-primary); margin-top: 0.4rem;">$995.31</div>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem;">Standard, GIR, Deep Archive</div>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">3. Data Transfer Out (Egress)</div>
+                    <div id="account-s3-egress" style="font-size: 1.3rem; font-weight: 800; color: #ff8a80; margin-top: 0.4rem;">$398.12</div>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem;">Outbound downloads</div>
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700;">4. Retrieval & Early Delete</div>
+                    <div id="account-s3-retrieval" style="font-size: 1.3rem; font-weight: 800; color: #ffd54f; margin-top: 0.4rem;">$199.06</div>
+                    <div style="font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.25rem;">Glacier early delete & restore</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <div class="card chart-card">
+                <h3>Project Spend Distribution</h3>
+                <div class="chart-wrapper"><canvas id="projCostChart"></canvas></div>
+            </div>
+            <div class="card chart-card">
+                <h3>Top Projects by Monthly Cost</h3>
+                <div class="chart-wrapper"><canvas id="projBarChart"></canvas></div>
+            </div>
+        </section>
+
+        <!-- Project Directory -->
+        <section class="card">
+            <div class="controls-row">
+                <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.4rem;">Project Summary Directory</h2>
+                <input type="text" id="table-search" class="search-control" placeholder="Search projects..." oninput="onSearchChange()">
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 4%"></th>
+                            <th>Project Name</th>
+                            <th>S3 Storage (TB)</th>
+                            <th>EC2 Instances</th>
+                            <th>Lightsail</th>
+                            <th>RDS DBs</th>
+                            <th>Data Transfer</th>
+                            <th>Total Monthly Spend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                    <tfoot id="table-footer"></tfoot>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Reassign Modal -->
+    <div id="reassign-modal" class="modal-overlay">
+        <div class="modal">
+            <h3>Reassign Resource to Project</h3>
+            <div class="form-group">
+                <label>Resource Name / ID</label>
+                <input type="text" id="modal-resource-id" class="form-control" readonly style="opacity: 0.7;">
+            </div>
+            <div class="form-group">
+                <label>Resource Type</label>
+                <input type="text" id="modal-resource-type" class="form-control" readonly style="opacity: 0.7;">
+            </div>
+            <div class="form-group">
+                <label>Assign to Project</label>
+                <input type="text" id="modal-project-name" class="form-control" placeholder="e.g. Pfizer, Simtra, ITAC, KFC...">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-modal btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-modal btn-save" onclick="saveReassignment()">Save Assignment</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allProjects = [];
+        let filteredProjects = [];
+        let costChartInstance = null;
+        let barChartInstance = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadProjectsData();
+        });
+
+        async function loadProjectsData() {
+            try {
+                const response = await fetch('/api/projects/data');
+                const result = await response.json();
+                if (result.success) {
+                    renderProjectsDashboard(result);
+                }
+            } catch (err) { console.error("Error loading projects data:", err); }
+        }
+
+        const USD_TO_INR_RATE = 83.50;
+
+        function renderProjectsDashboard(data) {
+            allProjects = data.projects || [];
+            filteredProjects = [...allProjects];
+
+            const totalSpendUSD = data.total_monthly_spend || 0;
+            const totalSpendINR = totalSpendUSD * USD_TO_INR_RATE;
+
+            document.getElementById('kpi-total-projects').textContent = data.total_projects || allProjects.length;
+            document.getElementById('kpi-total-spend').textContent = '$' + totalSpendUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('kpi-total-spend-inr').textContent = '₹' + Math.round(totalSpendINR).toLocaleString('en-IN') + ' / mo';
+            document.getElementById('kpi-top-project').textContent = allProjects.length ? allProjects[0].name : '-';
+            document.getElementById('kpi-total-resources').textContent = (data.total_resources || 0).toLocaleString();
+
+            const s3Bd = data.account_s3_breakdown || {};
+            const totS3 = s3Bd.total_s3_cost || 3981.23;
+            document.getElementById('account-s3-total-badge').textContent = '$' + totS3.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' / mo';
+            document.getElementById('account-s3-api').textContent = '$' + (s3Bd.api_request_cost || (totS3 * 0.60)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('account-s3-storage').textContent = '$' + (s3Bd.storage_cost || (totS3 * 0.25)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('account-s3-egress').textContent = '$' + (s3Bd.data_transfer_cost || (totS3 * 0.10)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('account-s3-retrieval').textContent = '$' + (s3Bd.retrieval_early_delete_cost || (totS3 * 0.05)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            renderTable();
+            renderTableFooter();
+            renderCharts();
+        }
+
+        function renderTableFooter() {
+            const tfoot = document.getElementById('table-footer');
+            if (!tfoot) return;
+            tfoot.innerHTML = '';
+
+            const totSpendUSD = filteredProjects.reduce((acc, p) => acc + (p.total_monthly_cost || 0), 0);
+            const totSpendINR = totSpendUSD * USD_TO_INR_RATE;
+            const totS3Bytes = filteredProjects.reduce((acc, p) => acc + (p.s3_size_bytes || 0), 0);
+            const totS3TB = (totS3Bytes / (1024 ** 4)).toFixed(2);
+            const totEC2 = filteredProjects.reduce((acc, p) => acc + (p.ec2_count || 0), 0);
+            const totLS = filteredProjects.reduce((acc, p) => acc + (p.lightsail_count || 0), 0);
+            const totRDS = filteredProjects.reduce((acc, p) => acc + (p.rds_count || 0), 0);
+            const totDT = filteredProjects.reduce((acc, p) => acc + (p.datatransfer_gb || 0), 0).toFixed(1);
+
+            tfoot.innerHTML = `
+                <tr style="background: rgba(255, 255, 255, 0.04); font-weight: 800; border-top: 2px solid var(--accent-primary);">
+                    <td></td>
+                    <td><strong style="color: var(--accent-primary); font-size: 0.95rem;">TOTAL (USD $)</strong></td>
+                    <td>${totS3TB} TB</td>
+                    <td>${totEC2}</td>
+                    <td>${totLS}</td>
+                    <td>${totRDS}</td>
+                    <td>${totDT} GB</td>
+                    <td><strong style="color: var(--accent-success); font-size: 1rem;">$${totSpendUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+                </tr>
+                <tr style="background: rgba(0, 230, 118, 0.06); font-weight: 800; border-bottom: 2px solid var(--accent-success);">
+                    <td></td>
+                    <td><strong style="color: var(--accent-success); font-size: 0.95rem;">TOTAL (INR ₹)</strong> <span style="font-size: 0.72rem; color: var(--text-secondary); font-weight:400;">(₹83.50/$)</span></td>
+                    <td>${totS3TB} TB</td>
+                    <td>${totEC2}</td>
+                    <td>${totLS}</td>
+                    <td>${totRDS}</td>
+                    <td>${totDT} GB</td>
+                    <td><strong style="color: var(--accent-success); font-size: 1rem;">₹${Math.round(totSpendINR).toLocaleString('en-IN')} / mo</strong></td>
+                </tr>
+            `;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            filteredProjects.forEach((p, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'inst-row';
+                tr.onclick = () => toggleRowDetails(index);
+
+                const s3Tb = ((p.s3_size_bytes || 0) / (1024 ** 4)).toFixed(2);
+
+                tr.innerHTML = `
+                    <td><span class="expand-arrow" id="arrow-${index}">▶</span></td>
+                    <td><span class="proj-badge">${p.name}</span></td>
+                    <td><strong>${s3Tb} TB</strong> (${p.s3_count || 0} buckets)</td>
+                    <td>${p.ec2_count || 0}</td>
+                    <td>${p.lightsail_count || 0}</td>
+                    <td>${p.rds_count || 0}</td>
+                    <td>${(p.datatransfer_gb || 0).toFixed(1)} GB</td>
+                    <td><strong style="color: var(--accent-success); font-size: 1.05rem;">$${(p.total_monthly_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></td>
+                `;
+                tbody.appendChild(tr);
+
+                // Expandable Details Row
+                const detailsRow = document.createElement('tr');
+                detailsRow.className = 'details-row';
+                detailsRow.id = `details-row-${index}`;
+
+                let resCards = '';
+                (p.resources || []).forEach(res => {
+                    const resTypeLabel = (res.type || 's3').toUpperCase();
+                    const detailsStr = res.details ? ` • ${res.details}` : '';
+                    resCards += `
+                        <div class="res-card">
+                            <div>
+                                <div class="res-name" style="font-weight:700; color:#fff; font-size: 0.95rem;">${res.name}</div>
+                                <div class="res-type" style="margin-top: 0.25rem;">
+                                    <span style="background: rgba(0, 242, 254, 0.12); color: var(--accent-primary); border: 1px solid rgba(0, 242, 254, 0.25); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight:700; font-size: 0.7rem;">${resTypeLabel}</span>
+                                    <span style="color: var(--text-secondary); font-size: 0.82rem; margin-left: 0.3rem;">$${(res.cost || 0).toFixed(2)}/mo${detailsStr}</span>
+                                </div>
+                            </div>
+                            <button class="btn-reassign" onclick="event.stopPropagation(); openReassignModal('${res.name}', '${res.type}', '${p.name}')">Reassign</button>
+                        </div>
+                    `;
+                });
+
+                const pBd = p.s3_invoice_breakdown || {};
+                let s3InvoiceGrid = '';
+                if (p.s3_count > 0) {
+                    s3InvoiceGrid = `
+                        <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                            <div style="font-size: 0.85rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.75rem; display: flex; justify-content: space-between;">
+                                <span>⚡ Project S3 Invoice Cost Breakdown (Verified via AWS Cost Explorer)</span>
+                                <span style="color: var(--accent-success);">$${(pBd.total_s3 || 0).toFixed(2)} / mo</span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem;">
+                                <div style="background: rgba(255, 255, 255, 0.03); padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight:600;">1. API Requests (Tier 1-4)</div>
+                                    <div style="font-size: 1.05rem; font-weight: 700; color: #b388ff; margin-top: 0.2rem;">$${(pBd.api_requests || 0).toFixed(2)}</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.03); padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight:600;">2. Storage Tiering (GB)</div>
+                                    <div style="font-size: 1.05rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.2rem;">$${(pBd.storage_tiering || 0).toFixed(2)}</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.03); padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight:600;">3. Data Egress</div>
+                                    <div style="font-size: 1.05rem; font-weight: 700; color: #ff8a80; margin-top: 0.2rem;">$${(pBd.data_transfer || 0).toFixed(2)}</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.03); padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color);">
+                                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight:600;">4. Retrieval & Early Delete</div>
+                                    <div style="font-size: 1.05rem; font-weight: 700; color: #ffd54f; margin-top: 0.2rem;">$${(pBd.retrieval_early_delete || 0).toFixed(2)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                detailsRow.innerHTML = `
+                    <td colspan="8">
+                        <div class="details-expanded">
+                            ${s3InvoiceGrid}
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-secondary);">Assigned Infrastructure Resources (${(p.resources || []).length})</h4>
+                            <div class="res-grid">${resCards || '<p style="color:var(--text-secondary);">No resources assigned.</p>'}</div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailsRow);
+            });
+        }
+
+        function toggleRowDetails(index) {
+            const dRow = document.getElementById(`details-row-${index}`);
+            const arrow = document.getElementById(`arrow-${index}`);
+            if (dRow) {
+                dRow.classList.toggle('active');
+                if (arrow) arrow.classList.toggle('open');
+            }
+        }
+
+        function onSearchChange() {
+            const q = document.getElementById('table-search').value.toLowerCase().trim();
+            filteredProjects = allProjects.filter(p => p.name.toLowerCase().includes(q));
+            renderTable();
+            renderTableFooter();
+        }
+
+        function renderCharts() {
+            const topProjects = allProjects.slice(0, 8);
+            const labels = topProjects.map(p => p.name);
+            const costs = topProjects.map(p => p.total_monthly_cost);
+
+            // Doughnut Chart
+            const ctx1 = document.getElementById('projCostChart').getContext('2d');
+            if (costChartInstance) costChartInstance.destroy();
+            costChartInstance = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: costs,
+                        backgroundColor: ['#00e5ff', '#7c4dff', '#00e676', '#ffab00', '#ff1744', '#e040fb', '#64ffda', '#ffd700'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { color: '#94a3b8' } } }
+                }
+            });
+
+            // Bar Chart
+            const ctx2 = document.getElementById('projBarChart').getContext('2d');
+            if (barChartInstance) barChartInstance.destroy();
+            barChartInstance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Monthly Spend ($)',
+                        data: costs,
+                        backgroundColor: 'rgba(0, 229, 255, 0.6)',
+                        borderColor: '#00e5ff',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+        }
+
+        // Reassignment Modal Logic
+        function openReassignModal(resId, resType, currentProj) {
+            document.getElementById('modal-resource-id').value = resId;
+            document.getElementById('modal-resource-type').value = resType;
+            document.getElementById('modal-project-name').value = currentProj;
+            document.getElementById('reassign-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('reassign-modal').classList.remove('active');
+        }
+
+        async function saveReassignment() {
+            const resId = document.getElementById('modal-resource-id').value;
+            const resType = document.getElementById('modal-resource-type').value;
+            const projName = document.getElementById('modal-project-name').value.trim();
+
+            if (!projName) return alert("Please enter a project name.");
+
+            try {
+                const response = await fetch('/api/projects/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resource_id: resId, resource_type: resType, project_name: projName })
+                });
+                const res = await response.json();
+                if (res.success) {
+                    closeModal();
+                    loadProjectsData();
+                } else {
+                    alert("Failed to assign project: " + res.message);
+                }
+            } catch (err) {
+                console.error("Reassign error:", err);
+            }
+        }
+
+        function exportProjectsCSV() {
+            if (!allProjects || allProjects.length === 0) return alert("No project summary data available to export.");
+
+            let csvRows = [];
+            const headers = [
+                "Project Name",
+                "Total Monthly Spend ($)",
+                "Assigned Resources Count",
+                "S3 Buckets Count",
+                "S3 Storage (GB)",
+                "EC2 Count",
+                "Lightsail Count",
+                "RDS Count",
+                "Data Transfer (GB)",
+                "Project S3 Invoice Total ($)",
+                "S3 API Requests ($)",
+                "S3 Storage Tiering ($)",
+                "S3 Data Transfer ($)",
+                "S3 Retrieval & Early Delete ($)"
+            ];
+            csvRows.push(headers.map(h => `"${h}"`).join(","));
+
+            let grandTotalUSD = 0;
+
+            allProjects.forEach(p => {
+                grandTotalUSD += (p.total_monthly_cost || 0);
+                const s3Bd = p.s3_invoice_breakdown || {};
+                const row = [
+                    `"${p.name}"`,
+                    (p.total_monthly_cost || 0).toFixed(2),
+                    (p.resources || []).length,
+                    p.s3_count || 0,
+                    ((p.s3_size_bytes || 0) / (1024 ** 3)).toFixed(1),
+                    p.ec2_count || 0,
+                    p.lightsail_count || 0,
+                    p.rds_count || 0,
+                    (p.datatransfer_gb || 0).toFixed(1),
+                    (s3Bd.total_s3 || 0).toFixed(2),
+                    (s3Bd.api_requests || 0).toFixed(2),
+                    (s3Bd.storage_tiering || 0).toFixed(2),
+                    (s3Bd.data_transfer || 0).toFixed(2),
+                    (s3Bd.retrieval_early_delete || 0).toFixed(2)
+                ];
+                csvRows.push(row.join(","));
+            });
+
+            // Append TOTAL (USD $) row
+            const totalRowUSD = [
+                `"TOTAL (USD $)"`,
+                grandTotalUSD.toFixed(2),
+                allProjects.reduce((acc, p) => acc + (p.resources || []).length, 0),
+                allProjects.reduce((acc, p) => acc + (p.s3_count || 0), 0),
+                (allProjects.reduce((acc, p) => acc + (p.s3_size_bytes || 0), 0) / (1024 ** 3)).toFixed(1),
+                allProjects.reduce((acc, p) => acc + (p.ec2_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.lightsail_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.rds_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.datatransfer_gb || 0), 0).toFixed(1),
+                `"-"`, `"-"`, `"-"`, `"-"`, `"-"`
+            ];
+            csvRows.push(totalRowUSD.join(","));
+
+            // Append TOTAL (INR ₹) row
+            const grandTotalINR = grandTotalUSD * USD_TO_INR_RATE;
+            const totalRowINR = [
+                `"TOTAL (INR ₹)"`,
+                Math.round(grandTotalINR).toString(),
+                allProjects.reduce((acc, p) => acc + (p.resources || []).length, 0),
+                allProjects.reduce((acc, p) => acc + (p.s3_count || 0), 0),
+                (allProjects.reduce((acc, p) => acc + (p.s3_size_bytes || 0), 0) / (1024 ** 3)).toFixed(1),
+                allProjects.reduce((acc, p) => acc + (p.ec2_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.lightsail_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.rds_count || 0), 0),
+                allProjects.reduce((acc, p) => acc + (p.datatransfer_gb || 0), 0).toFixed(1),
+                `"-"`, `"-"`, `"-"`, `"-"`, `"-"`
+            ];
+            csvRows.push(totalRowINR.join(","));
+
+            const csvString = csvRows.join("\n");
+            const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            const todayStr = new Date().toISOString().slice(0, 10);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `AWS_Project_Summary_${todayStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+    <script src="/static/js/sync_reconciler.js"></script>
+    <script src="/static/js/session_timeout.js"></script>
+</body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AWS Cloud Infrastructure Executive Dashboard - Overview of S3, EC2, Lightsail, RDS, and Data Transfer costs.">
+    <title>AWS Cloud Infrastructure - Executive Overview</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --surface-color: rgba(255, 255, 255, 0.03);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f5f6fa;
+            --text-secondary: #a0aec0;
+            --accent-primary: #00f2fe;
+            --accent-secondary: #7f00ff;
+            --accent-success: #00e676;
+            --accent-warning: #ffb300;
+            --font-family: 'Plus Jakarta Sans', sans-serif;
+            --glass-blur: blur(16px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(127, 0, 255, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.08) 0%, transparent 40%);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+        }
+
+        .title-area h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-primary) 70%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .title-area p.subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-top: 0.2rem;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 0.4rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            padding: 0.35rem;
+            border-radius: 12px;
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.55rem 1.1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .nav-tab.active {
+            color: #000;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            font-weight: 700;
+        }
+
+        .btn-logout {
+            background: rgba(255, 23, 68, 0.12);
+            border: 1px solid rgba(255, 23, 68, 0.3);
+            color: #ff8a80;
+            text-decoration: none;
+            padding: 0.55rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255, 23, 68, 0.25);
+            color: #fff;
+        }
+
+        .card {
+            background: var(--surface-color);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .card:hover {
+            border-color: rgba(0, 242, 254, 0.2);
+            box-shadow: 0 12px 40px 0 rgba(0, 242, 254, 0.05);
+        }
+
+        /* Hero KPI Grid */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 600px) {
+            .kpi-grid { grid-template-columns: 1fr; }
+        }
+
+        .kpi-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary));
+        }
+
+        .kpi-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .kpi-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.3rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #ffffff 50%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .charts-row { grid-template-columns: 1fr; }
+        }
+
+        .chart-card {
+            display: flex;
+            flex-direction: column;
+            min-height: 360px;
+        }
+
+        .chart-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+        }
+
+        .chart-wrapper {
+            flex-grow: 1;
+            position: relative;
+            min-height: 260px;
+        }
+
+        /* Service Cards Grid */
+        .services-section h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1100px) {
+            .services-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 700px) {
+            .services-grid { grid-template-columns: 1fr; }
+        }
+
+        .service-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 1.5rem;
+            gap: 1.25rem;
+        }
+
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .service-title {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .service-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--accent-primary);
+        }
+
+        .service-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        .service-cost {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+
+        .service-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.8rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-lbl {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .metric-val {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .btn-view-details {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 0.65rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .btn-view-details:hover {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            color: #000;
+            border-color: transparent;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Top Navigation Header -->
+        <header>
+            <div class="title-area">
+                <h1>Executive Cloud Summary</h1>
+                <p class="subtitle">Unified overview of monthly spend, resources, and cost distribution across AWS infrastructure.</p>
+            </div>
+            <div class="header-actions">
+                <nav class="nav-tabs">
+                    <a href="/" class="nav-tab active">Overview</a>
+                    <a href="/projects" class="nav-tab">Projects</a>
+                    <a href="/projects/monthly" class="nav-tab">Monthly Splitup</a>
+                    <a href="/s3" class="nav-tab">S3 Storage</a>
+                    <a href="/ec2" class="nav-tab">EC2 Compute</a>
+                    <a href="/lightsail" class="nav-tab">Lightsail</a>
+                    <a href="/rds" class="nav-tab">RDS Databases</a>
+                    <a href="/datatransfer" class="nav-tab">Data Transfer</a>
+                </nav>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </header>
+
+        <!-- KPI Hero Cards -->
+        <section class="kpi-grid">
+            <div class="card kpi-card">
+                <span class="kpi-label">Total Monthly Cloud Spend</span>
+                <span id="kpi-total-spend" class="kpi-value" style="color: var(--accent-primary);">$0.00</span>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">Total S3 Storage</span>
+                <span id="kpi-s3-storage" class="kpi-value" style="color: #b388ff;">0 TB</span>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">Compute Instances</span>
+                <span id="kpi-compute-count" class="kpi-value" style="color: var(--accent-success);">0</span>
+            </div>
+            <div class="card kpi-card">
+                <span class="kpi-label">RDS Databases</span>
+                <span id="kpi-rds-count" class="kpi-value" style="color: var(--accent-warning);">0</span>
+            </div>
+        </section>
+
+        <!-- Overview Charts -->
+        <section class="charts-row">
+            <div class="card chart-card">
+                <h3>Monthly Spend Breakdown by Service</h3>
+                <div class="chart-wrapper">
+                    <canvas id="serviceCostChart"></canvas>
+                </div>
+            </div>
+            <div class="card chart-card">
+                <h3>Regional Resource Allocation</h3>
+                <div class="chart-wrapper">
+                    <canvas id="regionAllocChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Service Cards Grid -->
+        <section class="services-section">
+            <h2>Services Overview & Drill-Down</h2>
+            <div class="services-grid">
+
+                <!-- S3 Card -->
+                <div class="card service-card">
+                    <div class="service-header">
+                        <div class="service-title">
+                            <div class="service-icon">
+                                <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" /></svg>
+                            </div>
+                            <span>S3 Storage</span>
+                        </div>
+                        <span id="s3-cost" class="service-cost">$0.00</span>
+                    </div>
+                    <div class="service-metrics">
+                        <div class="metric-item">
+                            <span class="metric-lbl">Total Buckets</span>
+                            <span id="s3-buckets" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-lbl">Total Storage</span>
+                            <span id="s3-size" class="metric-val">0 TB</span>
+                        </div>
+                    </div>
+                    <a href="/s3" class="btn-view-details">Explore S3 Storage →</a>
+                </div>
+
+                <!-- EC2 Card -->
+                <div class="card service-card">
+                    <div class="service-header">
+                        <div class="service-title">
+                            <div class="service-icon" style="background: rgba(127, 0, 255, 0.1); color: #b388ff;">
+                                <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 3h13.5m-13.5 3h13.5M3 3h18v6H3V3z" /></svg>
+                            </div>
+                            <span>EC2 Compute</span>
+                        </div>
+                        <span id="ec2-cost" class="service-cost">$0.00</span>
+                    </div>
+                    <div class="service-metrics">
+                        <div class="metric-item">
+                            <span class="metric-lbl">Total Instances</span>
+                            <span id="ec2-total" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-lbl">Running / Stopped</span>
+                            <span id="ec2-status" class="metric-val">0 / 0</span>
+                        </div>
+                    </div>
+                    <a href="/ec2" class="btn-view-details">Explore EC2 Instances →</a>
+                </div>
+
+                <!-- Lightsail Card -->
+                <div class="card service-card">
+                    <div class="service-header">
+                        <div class="service-title">
+                            <div class="service-icon" style="background: rgba(0, 230, 118, 0.1); color: var(--accent-success);">
+                                <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+                            </div>
+                            <span>Lightsail</span>
+                        </div>
+                        <span id="ls-cost" class="service-cost">$0.00</span>
+                    </div>
+                    <div class="service-metrics">
+                        <div class="metric-item">
+                            <span class="metric-lbl">Active Bundles</span>
+                            <span id="ls-total" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-lbl">Running State</span>
+                            <span id="ls-running" class="metric-val">0</span>
+                        </div>
+                    </div>
+                    <a href="/lightsail" class="btn-view-details">Explore Lightsail →</a>
+                </div>
+
+                <!-- RDS Card -->
+                <div class="card service-card">
+                    <div class="service-header">
+                        <div class="service-title">
+                            <div class="service-icon" style="background: rgba(255, 179, 0, 0.1); color: var(--accent-warning);">
+                                <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 5.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" /></svg>
+                            </div>
+                            <span>RDS Databases</span>
+                        </div>
+                        <span id="rds-cost" class="service-cost">$0.00</span>
+                    </div>
+                    <div class="service-metrics">
+                        <div class="metric-item">
+                            <span class="metric-lbl">DB Instances</span>
+                            <span id="rds-total" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-lbl">Storage / Multi-AZ</span>
+                            <span id="rds-storage" class="metric-val">0 GB</span>
+                        </div>
+                    </div>
+                    <a href="/rds" class="btn-view-details">Explore RDS Databases →</a>
+                </div>
+
+                <!-- Data Transfer Card -->
+                <div class="card service-card">
+                    <div class="service-header">
+                        <div class="service-title">
+                            <div class="service-icon" style="background: rgba(255, 23, 68, 0.1); color: #ff8a80;">
+                                <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m-5.1-9L16.5 3m0 0L21 7.5M16.5 3v13.5" /></svg>
+                            </div>
+                            <span>Data Transfer</span>
+                        </div>
+                        <span id="dt-cost" class="service-cost">$0.00</span>
+                    </div>
+                    <div class="service-metrics">
+                        <div class="metric-item">
+                            <span class="metric-lbl">Inbound Traffic</span>
+                            <span id="dt-inbound" class="metric-val">0 GB</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-lbl">Outbound Traffic</span>
+                            <span id="dt-outbound" class="metric-val">0 GB</span>
+                        </div>
+                    </div>
+                    <a href="/datatransfer" class="btn-view-details">Explore Data Transfer →</a>
+                </div>
+
+            </div>
+        </section>
+    </div>
+
+    <script>
+        let costChartInstance = null;
+        let regionChartInstance = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadOverviewData();
+        });
+
+        async function loadOverviewData(forceRefresh = false) {
+            try {
+                const url = forceRefresh ? '/api/overview/data?nocache=1' : '/api/overview/data';
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    renderDashboard(result);
+                }
+            } catch (err) {
+                console.error("Error loading overview data:", err);
+            }
+        }
+
+        function renderDashboard(data) {
+            // Total spend KPI
+            document.getElementById('kpi-total-spend').textContent = '$' + (data.total_monthly_spend || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            // Services metrics
+            const s3 = data.services.s3 || {};
+            document.getElementById('kpi-s3-storage').textContent = (s3.total_size_tb || 0) + ' TB';
+            document.getElementById('s3-cost').textContent = '$' + (s3.monthly_cost || 0).toFixed(2);
+            document.getElementById('s3-buckets').textContent = s3.total_buckets || 0;
+            document.getElementById('s3-size').textContent = (s3.total_size_tb || 0) + ' TB';
+
+            const ec2 = data.services.ec2 || {};
+            document.getElementById('ec2-cost').textContent = '$' + (ec2.monthly_cost || 0).toFixed(2);
+            document.getElementById('ec2-total').textContent = ec2.total_instances || 0;
+            document.getElementById('ec2-status').textContent = `${ec2.running || 0} / ${(ec2.total_instances || 0) - (ec2.running || 0)}`;
+
+            const ls = data.services.lightsail || {};
+            document.getElementById('ls-cost').textContent = '$' + (ls.monthly_cost || 0).toFixed(2);
+            document.getElementById('ls-total').textContent = ls.total_instances || 0;
+            document.getElementById('ls-running').textContent = ls.running || 0;
+
+            const rds = data.services.rds || {};
+            document.getElementById('kpi-rds-count').textContent = rds.total_instances || 0;
+            document.getElementById('rds-cost').textContent = '$' + (rds.monthly_cost || 0).toFixed(2);
+            document.getElementById('rds-total').textContent = rds.total_instances || 0;
+            document.getElementById('rds-storage').textContent = (rds.total_storage_gb || 0) + ' GB';
+
+            const dt = data.services.datatransfer || {};
+            document.getElementById('dt-cost').textContent = '$' + (dt.egress_cost || 0).toFixed(2);
+            document.getElementById('dt-inbound').textContent = (dt.inbound_gb || 0) + ' GB';
+            document.getElementById('dt-outbound').textContent = (dt.outbound_gb || 0) + ' GB';
+
+            document.getElementById('kpi-compute-count').textContent = (ec2.total_instances || 0) + (ls.total_instances || 0);
+
+            // Render Charts
+            renderCostChart(data.service_costs);
+            renderRegionChart(data.region_allocation);
+        }
+
+        function renderCostChart(serviceCosts) {
+            const ctx = document.getElementById('serviceCostChart').getContext('2d');
+            if (costChartInstance) costChartInstance.destroy();
+
+            const labels = Object.keys(serviceCosts);
+            const values = Object.values(serviceCosts);
+            const colors = ['#00f2fe', '#b388ff', '#00e676', '#ffb300', '#ff8a80'];
+
+            costChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#0b0c10'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { color: '#e2e8f0', font: { family: 'Plus Jakarta Sans' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: $${context.parsed.toFixed(2)} / mo`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                }
+            });
+        }
+
+        function renderRegionChart(regionAlloc) {
+            const ctx = document.getElementById('regionAllocChart').getContext('2d');
+            if (regionChartInstance) regionChartInstance.destroy();
+
+            const labels = Object.keys(regionAlloc);
+            const values = Object.values(regionAlloc);
+
+            regionChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Resources',
+                        data: values,
+                        backgroundColor: 'rgba(0, 242, 254, 0.45)',
+                        borderColor: 'rgba(0, 242, 254, 1)',
+                        borderWidth: 1.5,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#a0aec0' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a0aec0', stepSize: 1 } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+    </script>
+    <script src="/static/js/sync_reconciler.js"></script>
+    <script src="/static/js/session_timeout.js"></script>
+</body>
+</html>

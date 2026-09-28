@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AWS Data Transfer Dashboard - Monitor network traffic, inbound/outbound transfer, bundled allowances, and egress costs.">
+    <title>AWS Data Transfer Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --surface-color: rgba(255, 255, 255, 0.03);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f5f6fa;
+            --text-secondary: #a0aec0;
+            --accent-primary: #00f2fe;
+            --accent-secondary: #7f00ff;
+            --accent-success: #00e676;
+            --accent-warning: #ffb300;
+            --accent-error: #ff1744;
+            --font-family: 'Plus Jakarta Sans', sans-serif;
+            --glass-blur: blur(16px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(127, 0, 255, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.08) 0%, transparent 40%);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+            overflow-x: hidden;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;
+            border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;
+        }
+
+        .title-area h1 {
+            font-family: 'Outfit', sans-serif; font-size: 2.5rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-primary) 70%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;
+        }
+
+        .title-area p.subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-top: 0.2rem; }
+
+        .header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+        .nav-tabs {
+            display: flex; gap: 0.4rem; background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color); padding: 0.35rem; border-radius: 12px; flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            color: var(--text-secondary); text-decoration: none; padding: 0.55rem 1.1rem;
+            border-radius: 8px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
+        }
+
+        .nav-tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.03); }
+        .nav-tab.active { color: #000; background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%); font-weight: 700; }
+
+        .btn-logout {
+            background: rgba(255, 23, 68, 0.12); border: 1px solid rgba(255, 23, 68, 0.3);
+            color: #ff8a80; text-decoration: none; padding: 0.55rem 1rem; border-radius: 8px;
+            font-weight: 600; font-size: 0.85rem; transition: all 0.2s;
+        }
+        .btn-logout:hover { background: rgba(255, 23, 68, 0.25); color: #fff; }
+
+        .card {
+            background: var(--surface-color); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .top-section { display: grid; grid-template-columns: 350px 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (max-width: 1024px) { .top-section { grid-template-columns: 1fr; } }
+
+        .config-form { display: flex; flex-direction: column; gap: 1rem; }
+        .config-form h3 { font-size: 1.2rem; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+        .form-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.6rem 0.8rem; outline: none; }
+        .form-control:focus { border-color: var(--accent-primary); }
+
+        .btn-scan {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            border: none; border-radius: 8px; color: #000; font-family: var(--font-family); font-weight: 700;
+            padding: 0.75rem 1rem; cursor: pointer; transition: transform 0.2s; margin-top: 0.5rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        }
+
+        .btn-scan:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .status-container {
+            font-size: 0.85rem; padding: 0.6rem; border-radius: 8px; background: rgba(0, 0, 0, 0.2);
+            border-left: 3px solid var(--accent-primary); margin-top: 0.5rem;
+        }
+        .status-running { border-left-color: var(--accent-warning); animation: pulse 1.5s infinite; }
+        .status-error { border-left-color: var(--accent-error); color: #ff8a80; }
+
+        .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        @media (max-width: 900px) { .kpi-container { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .kpi-container { grid-template-columns: 1fr; } }
+
+        .kpi-card { display: flex; flex-direction: column; justify-content: center; padding: 1.5rem; position: relative; overflow: hidden; }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary)); }
+
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; }
+        .kpi-value { font-family: 'Outfit', sans-serif; font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; background: linear-gradient(135deg, #ffffff 50%, var(--text-secondary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .charts-section { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (max-width: 1024px) { .charts-section { grid-template-columns: 1fr; } }
+
+        .chart-card { display: flex; flex-direction: column; min-height: 340px; }
+        .chart-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; }
+        .chart-wrapper { flex-grow: 1; position: relative; min-height: 240px; }
+
+        .details-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+        .details-header h2 { font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 700; }
+
+        .controls-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .search-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.5rem 1rem; font-size: 0.9rem; outline: none; width: 260px; }
+
+        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        th { background: rgba(255, 255, 255, 0.02); color: var(--text-secondary); font-weight: 600; padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; text-transform: uppercase; }
+        td { padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); }
+
+        tr.inst-row { cursor: pointer; transition: background-color 0.2s; }
+        tr.inst-row:hover { background-color: var(--surface-hover); }
+
+        .expand-arrow { transition: transform 0.2s; display: inline-block; }
+        tr.inst-row.expanded .expand-arrow { transform: rotate(90deg); }
+
+        .details-row { background: rgba(0, 0, 0, 0.2); display: none; }
+        .details-row.active { display: table-row; }
+
+        .details-expanded { padding: 1.5rem; }
+        .inst-details-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.2rem; }
+        .detail-item { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 0.8rem 1rem; }
+        .detail-label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; }
+        .detail-value { font-size: 0.95rem; font-weight: 500; color: var(--text-primary); margin-top: 0.2rem; word-break: break-all; }
+
+        .pagination-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; color: var(--text-secondary); }
+        .pagination-controls { display: flex; gap: 0.4rem; }
+        .btn-page { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-page:hover:not(:disabled) { background: var(--accent-primary); color: #000; }
+        .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .spinner { width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #000; animation: spin 1s infinite linear; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="title-area">
+                <h1>AWS Data Transfer Dashboard</h1>
+                <p class="subtitle" id="main-subtitle">CloudWatch network traffic (NetworkIn / NetworkOut), bundled allowances, and egress costs.</p>
+            </div>
+            <div class="header-actions">
+                <nav class="nav-tabs">
+                    <a href="/" class="nav-tab">Overview</a>
+                    <a href="/projects" class="nav-tab">Projects</a>
+                    <a href="/projects/monthly" class="nav-tab">Monthly Splitup</a>
+                    <a href="/s3" class="nav-tab">S3 Storage</a>
+                    <a href="/ec2" class="nav-tab">EC2 Compute</a>
+                    <a href="/lightsail" class="nav-tab">Lightsail</a>
+                    <a href="/rds" class="nav-tab">RDS Databases</a>
+                    <a href="/datatransfer" class="nav-tab active">Data Transfer</a>
+                </nav>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </header>
+
+        <!-- Top Section -->
+        <section class="top-section">
+            <div class="card">
+                <div class="config-form">
+                    <h3>Scan Controller</h3>
+                    <div class="form-group">
+                        <label for="aws-profile">AWS Profile</label>
+                        <input type="text" id="aws-profile" class="form-control" placeholder="default">
+                    </div>
+                    <div class="form-group">
+                        <label for="aws-region">AWS Region</label>
+                        <input type="text" id="aws-region" class="form-control" placeholder="us-east-1">
+                    </div>
+                    <button id="btn-trigger-scan" class="btn-scan" onclick="triggerScan()">
+                        <span id="btn-text">Trigger Transfer Scan</span>
+                    </button>
+                    <div id="scan-status-banner" class="status-container" style="display: none;">
+                        <span id="scan-status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="kpi-container">
+                <div class="card kpi-card">
+                    <span class="kpi-label">Total Inbound</span>
+                    <span id="kpi-inbound" class="kpi-value" style="color: var(--accent-success);">0 GB</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Total Outbound</span>
+                    <span id="kpi-outbound" class="kpi-value" style="color: #b388ff;">0 GB</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Included Allowance</span>
+                    <span id="kpi-allowance" class="kpi-value" style="color: var(--accent-primary);">0 GB</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Est. Egress Cost</span>
+                    <span id="kpi-cost" class="kpi-value" style="color: #ff8a80;">$0.00</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard View -->
+        <div id="dashboard-view">
+            <section class="charts-section">
+                <div class="card chart-card">
+                    <h3>Inbound vs Outbound Split</h3>
+                    <div class="chart-wrapper"><canvas id="splitChart"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <h3>Top Outbound Consuming Resources</h3>
+                    <div class="chart-wrapper"><canvas id="topChart"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <h3>Transfer by Service</h3>
+                    <div class="chart-wrapper"><canvas id="svcChart"></canvas></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="details-header">
+                    <h2>Data Transfer Directory</h2>
+                    <div class="controls-row">
+                        <input type="text" id="table-search" class="search-control" placeholder="Search resources..." oninput="onSearchChange()">
+                        <select id="page-size" class="search-control" style="width: 100px;" onchange="onPageSizeChange()">
+                            <option value="10">10 / page</option>
+                            <option value="25" selected>25 / page</option>
+                            <option value="50">50 / page</option>
+                            <option value="9999">All</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 4%"></th>
+                                <th>Resource / ID</th>
+                                <th>Service</th>
+                                <th>Region</th>
+                                <th>Inbound (GB)</th>
+                                <th>Outbound (GB)</th>
+                                <th>Allowance Used %</th>
+                                <th>Est. Egress Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar">
+                    <span id="page-info">Showing 0-0 of 0 resources</span>
+                    <div class="pagination-controls">
+                        <button id="btn-prev" class="btn-page" onclick="prevPage()">Prev</button>
+                        <button id="btn-next" class="btn-page" onclick="nextPage()">Next</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        let allResources = [];
+        let filteredResources = [];
+        let currentPage = 1;
+        let pageSize = 25;
+        let splitChartInst = null;
+        let topChartInst = null;
+        let svcChartInst = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadTransferData();
+            checkScanStatus();
+            setInterval(checkScanStatus, 3000);
+        });
+
+        async function loadTransferData(forceRefresh = false) {
+            try {
+                const url = forceRefresh ? '/api/datatransfer/data?nocache=1' : '/api/datatransfer/data';
+                const response = await fetch(url);
+                const result = await response.json();
+                if (result.success) {
+                    renderData(result);
+                    if (result.last_scan_time) {
+                        document.getElementById('main-subtitle').innerHTML = `Data Transfer snapshot date: <strong>${result.last_scan_time}</strong>`;
+                    }
+                }
+            } catch (err) { console.error("Error loading transfer data:", err); }
+        }
+
+        function renderData(data) {
+            allResources = data.resources || [];
+            filteredResources = [...allResources];
+
+            const t = data.totals || {};
+            document.getElementById('kpi-inbound').textContent = (t.total_inbound_gb || 0).toLocaleString() + ' GB';
+            document.getElementById('kpi-outbound').textContent = (t.total_outbound_gb || 0).toLocaleString() + ' GB';
+            document.getElementById('kpi-allowance').textContent = (t.total_allowance_gb || 0).toLocaleString() + ' GB';
+            document.getElementById('kpi-cost').textContent = '$' + (t.total_egress_cost || 0).toFixed(2);
+
+            renderPage();
+            renderSplitChart(t.total_inbound_gb || 0, t.total_outbound_gb || 0);
+            renderTopChart(allResources.slice(0, 5));
+            renderSvcChart(t.by_service || {});
+        }
+
+        function renderPage() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, filteredResources.length);
+            const pageData = filteredResources.slice(startIdx, endIdx);
+
+            pageData.forEach((r, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'inst-row';
+                tr.id = `inst-row-${index}`;
+                tr.onclick = () => toggleRowDetails(index);
+
+                const pct = (r.allowance_used_pct || 0).toFixed(1) + '%';
+                const monthlyCostStr = `$${parseFloat(r.egress_cost || 0).toFixed(2)}`;
+
+                tr.innerHTML = `
+                    <td><span class="expand-arrow" id="arrow-${index}">▶</span></td>
+                    <td><strong>${r.resource_name || r.resource_id}</strong><br><span style="font-size:0.8rem; color:var(--text-secondary);">${r.resource_id}</span></td>
+                    <td><code>${r.service}</code></td>
+                    <td>${r.region}</td>
+                    <td>${r.inbound_gb || 0} GB</td>
+                    <td>${r.outbound_gb || 0} GB</td>
+                    <td>${pct}</td>
+                    <td><strong style="color: var(--accent-primary);">${monthlyCostStr}</strong></td>
+                `;
+                tbody.appendChild(tr);
+
+                // Expandable Details Row
+                const detailsRow = document.createElement('tr');
+                detailsRow.className = 'details-row';
+                detailsRow.id = `details-row-${index}`;
+
+                detailsRow.innerHTML = `
+                    <td colspan="8">
+                        <div class="details-expanded">
+                            <h4 style="margin-bottom: 0.75rem; font-size: 0.9rem; text-transform: uppercase; color: var(--text-secondary);">Network Egress & Allowance Breakdown</h4>
+                            <div class="inst-details-grid">
+                                <div class="detail-item">
+                                    <div class="detail-label">Service Provider</div>
+                                    <div class="detail-value"><code>${r.service}</code></div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">AWS Region</div>
+                                    <div class="detail-value">${r.region}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">30-Day Inbound Traffic</div>
+                                    <div class="detail-value" style="color: var(--accent-success); font-weight:700;">${r.inbound_gb || 0} GB</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">30-Day Outbound Traffic</div>
+                                    <div class="detail-value" style="color: #b388ff; font-weight:700;">${r.outbound_gb || 0} GB</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Included Allowance</div>
+                                    <div class="detail-value">${(r.allowance_gb || 0).toLocaleString()} GB / month</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Allowance Utilization</div>
+                                    <div class="detail-value">${pct}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Overage Egress Traffic</div>
+                                    <div class="detail-value" style="color: var(--accent-warning);">${r.overage_gb || 0} GB</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Est. Egress Cost ($0.09/GB)</div>
+                                    <div class="detail-value" style="color: var(--accent-primary); font-weight:700;">${monthlyCostStr}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailsRow);
+            });
+
+            document.getElementById('page-info').textContent = `Showing ${filteredResources.length ? startIdx + 1 : 0}-${endIdx} of ${filteredResources.length} resources`;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = endIdx >= filteredResources.length;
+        }
+
+        function toggleRowDetails(index) {
+            const row = document.getElementById(`inst-row-${index}`);
+            const details = document.getElementById(`details-row-${index}`);
+            const isActive = details.classList.contains('active');
+            if (isActive) {
+                details.classList.remove('active');
+                row.classList.remove('expanded');
+            } else {
+                details.classList.add('active');
+                row.classList.add('expanded');
+            }
+        }
+
+        function onSearchChange() {
+            const q = document.getElementById('table-search').value.toLowerCase();
+            filteredResources = allResources.filter(r => (r.resource_name || r.resource_id).toLowerCase().includes(q) || r.service.toLowerCase().includes(q));
+            currentPage = 1;
+            renderPage();
+        }
+
+        function onPageSizeChange() { pageSize = parseInt(document.getElementById('page-size').value); currentPage = 1; renderPage(); }
+        function prevPage() { if (currentPage > 1) { currentPage--; renderPage(); } }
+        function nextPage() { if ((currentPage * pageSize) < filteredResources.length) { currentPage++; renderPage(); } }
+
+        function renderSplitChart(inbound, outbound) {
+            const ctx = document.getElementById('splitChart').getContext('2d');
+            if (splitChartInst) splitChartInst.destroy();
+            splitChartInst = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: ['Inbound GB', 'Outbound GB'], datasets: [{ data: [inbound, outbound], backgroundColor: ['#00e676', '#b388ff'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#e2e8f0' } } }, cutout: '65%' }
+            });
+        }
+
+        function renderTopChart(topRes) {
+            const ctx = document.getElementById('topChart').getContext('2d');
+            if (topChartInst) topChartInst.destroy();
+            topChartInst = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: topRes.map(r => r.resource_name || r.resource_id), datasets: [{ label: 'Outbound GB', data: topRes.map(r => r.outbound_gb), backgroundColor: 'rgba(0, 242, 254, 0.45)', borderColor: 'rgba(0, 242, 254, 1)', borderWidth: 1.5, borderRadius: 6 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#a0aec0' } }, y: { ticks: { color: '#a0aec0' } } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function renderSvcChart(data) {
+            const ctx = document.getElementById('svcChart').getContext('2d');
+            if (svcChartInst) svcChartInst.destroy();
+            const labels = Object.keys(data);
+            const values = Object.values(data).map(v => v.outbound_gb || 0);
+
+            svcChartInst = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Outbound GB', data: values, backgroundColor: 'rgba(127, 0, 255, 0.45)', borderColor: 'rgba(127, 0, 255, 1)', borderWidth: 1.5, borderRadius: 6 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#a0aec0' } }, y: { ticks: { color: '#a0aec0' } } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        async function triggerScan() {
+            const btn = document.getElementById('btn-trigger-scan');
+            const profile = document.getElementById('aws-profile').value;
+            const region = document.getElementById('aws-region').value;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Running Transfer Scan...</span>';
+
+            try {
+                const response = await fetch('/api/datatransfer/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile: profile || null, region: region || null })
+                });
+                const result = await response.json();
+                if (result.success) checkScanStatus();
+                else { alert("Scan failed: " + result.message); resetScanButton(); }
+            } catch (err) { console.error("Error triggering scan:", err); resetScanButton(); }
+        }
+
+        async function checkScanStatus() {
+            try {
+                const response = await fetch('/api/datatransfer/status');
+                const status = await response.json();
+                const banner = document.getElementById('scan-status-banner');
+                const text = document.getElementById('scan-status-text');
+                const btn = document.getElementById('btn-trigger-scan');
+
+                if (status.is_running) {
+                    banner.style.display = 'block';
+                    banner.className = 'status-container status-running';
+                    text.textContent = status.message;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner"></span> <span>Scanning AWS...</span>';
+                } else {
+                    if (status.last_run) {
+                        banner.style.display = 'block';
+                        banner.className = 'status-container';
+                        if (status.error) {
+                            banner.classList.add('status-error');
+                            text.textContent = status.message + " Error: " + status.error;
+                        } else {
+                            text.innerHTML = `Last completed scan: <strong>${status.last_run}</strong>`;
+                        }
+                    } else {
+                        banner.style.display = 'none';
+                    }
+
+                    if (btn.innerHTML.includes('spinner')) {
+                        resetScanButton();
+                        sessionStorage.removeItem('datatransfer_data_cache');
+                        sessionStorage.removeItem('overview_data_cache');
+                        loadTransferData(true);
+                    }
+                }
+            } catch (err) { console.error("Error checking status:", err); }
+        }
+
+        function resetScanButton() {
+            const btn = document.getElementById('btn-trigger-scan');
+            btn.disabled = false;
+            btn.innerHTML = '<span>Trigger Transfer Scan</span>';
+        }
+    </script>
+</body>
+</html>

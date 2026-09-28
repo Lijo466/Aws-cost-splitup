@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AWS S3 Storage Tier Dashboard - Monitor bucket sizes, object counts, storage classes, and costs.">
+    <title>AWS S3 Storage Tier Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --surface-color: rgba(255, 255, 255, 0.03);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f5f6fa;
+            --text-secondary: #a0aec0;
+            --accent-primary: #00f2fe;
+            --accent-secondary: #7f00ff;
+            --accent-success: #00e676;
+            --accent-warning: #ffb300;
+            --accent-error: #ff1744;
+            --font-family: 'Plus Jakarta Sans', sans-serif;
+            --glass-blur: blur(16px);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(127, 0, 255, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.08) 0%, transparent 40%);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+            overflow-x: hidden;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;
+            border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;
+        }
+
+        .title-area h1 {
+            font-family: 'Outfit', sans-serif; font-size: 2.5rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-primary) 70%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;
+        }
+
+        .title-area p.subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-top: 0.2rem; }
+
+        .header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+        .nav-tabs {
+            display: flex; gap: 0.4rem; background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color); padding: 0.35rem; border-radius: 12px; flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            color: var(--text-secondary); text-decoration: none; padding: 0.55rem 1.1rem;
+            border-radius: 8px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;
+        }
+
+        .nav-tab:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.03); }
+        .nav-tab.active { color: #000; background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%); font-weight: 700; }
+
+        .btn-logout {
+            background: rgba(255, 23, 68, 0.12); border: 1px solid rgba(255, 23, 68, 0.3);
+            color: #ff8a80; text-decoration: none; padding: 0.55rem 1rem; border-radius: 8px;
+            font-weight: 600; font-size: 0.85rem; transition: all 0.2s;
+        }
+        .btn-logout:hover { background: rgba(255, 23, 68, 0.25); color: #fff; }
+
+        .card {
+            background: var(--surface-color); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .top-section { display: grid; grid-template-columns: 350px 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (max-width: 1024px) { .top-section { grid-template-columns: 1fr; } }
+
+        .config-form { display: flex; flex-direction: column; gap: 1rem; }
+        .config-form h3 { font-size: 1.2rem; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; }
+
+        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+        .form-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.6rem 0.8rem; outline: none; }
+        .form-control:focus { border-color: var(--accent-primary); }
+
+        .btn-scan {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+            border: none; border-radius: 8px; color: #000; font-family: var(--font-family); font-weight: 700;
+            padding: 0.75rem 1rem; cursor: pointer; transition: transform 0.2s; margin-top: 0.5rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        }
+
+        .btn-scan:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .status-container {
+            font-size: 0.85rem; padding: 0.6rem; border-radius: 8px; background: rgba(0, 0, 0, 0.2);
+            border-left: 3px solid var(--accent-primary); margin-top: 0.5rem;
+        }
+        .status-running { border-left-color: var(--accent-warning); animation: pulse 1.5s infinite; }
+        .status-error { border-left-color: var(--accent-error); color: #ff8a80; }
+
+        .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+        @media (max-width: 900px) { .kpi-container { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px) { .kpi-container { grid-template-columns: 1fr; } }
+
+        .kpi-card { display: flex; flex-direction: column; justify-content: center; padding: 1.5rem; position: relative; overflow: hidden; }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: linear-gradient(to bottom, var(--accent-primary), var(--accent-secondary)); }
+
+        .kpi-label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; text-transform: uppercase; }
+        .kpi-value { font-family: 'Outfit', sans-serif; font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; background: linear-gradient(135deg, #ffffff 50%, var(--text-secondary) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .charts-section { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-bottom: 1.5rem; }
+        @media (max-width: 900px) { .charts-section { grid-template-columns: 1fr; } }
+
+        .chart-card { display: flex; flex-direction: column; min-height: 340px; }
+        .chart-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; }
+        .chart-wrapper { flex-grow: 1; position: relative; min-height: 240px; }
+
+        .details-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+        .details-header h2 { font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 700; }
+
+        .controls-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .search-control { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); padding: 0.5rem 1rem; font-size: 0.9rem; outline: none; width: 260px; }
+
+        .table-container { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border-color); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+        th { background: rgba(255, 255, 255, 0.02); color: var(--text-secondary); font-weight: 600; padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; text-transform: uppercase; }
+        td { padding: 1rem 1.2rem; border-bottom: 1px solid var(--border-color); }
+
+        tr.inst-row { cursor: pointer; transition: background-color 0.2s; }
+        tr.inst-row:hover { background-color: var(--surface-hover); }
+
+        .expand-arrow { transition: transform 0.2s; display: inline-block; }
+        tr.inst-row.expanded .expand-arrow { transform: rotate(90deg); }
+
+        .details-row { background: rgba(0, 0, 0, 0.2); display: none; }
+        .details-row.active { display: table-row; }
+
+        .details-expanded { padding: 1.5rem; }
+        .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 0.5rem; }
+        .sc-card { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 0.8rem 1rem; }
+        .sc-name { font-size: 0.85rem; font-weight: 700; color: var(--accent-primary); text-transform: uppercase; }
+        .sc-val { font-size: 0.95rem; color: var(--text-primary); margin-top: 0.2rem; }
+
+        .pagination-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; color: var(--text-secondary); }
+        .pagination-controls { display: flex; gap: 0.4rem; }
+        .btn-page { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600; }
+        .btn-page:hover:not(:disabled) { background: var(--accent-primary); color: #000; }
+        .btn-page:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .spinner { width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #000; animation: spin 1s infinite linear; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="title-area">
+                <h1 id="main-title">AWS S3 Storage Tier Dashboard</h1>
+                <p class="subtitle" id="main-subtitle">Bucket sizes, object counts, storage class tiering, and estimated monthly costs.</p>
+            </div>
+            <div class="header-actions">
+                <nav class="nav-tabs">
+                    <a href="/" class="nav-tab">Overview</a>
+                    <a href="/projects" class="nav-tab">Projects</a>
+                    <a href="/projects/monthly" class="nav-tab">Monthly Splitup</a>
+                    <a href="/s3" class="nav-tab active">S3 Storage</a>
+                    <a href="/ec2" class="nav-tab">EC2 Compute</a>
+                    <a href="/lightsail" class="nav-tab">Lightsail</a>
+                    <a href="/rds" class="nav-tab">RDS Databases</a>
+                    <a href="/datatransfer" class="nav-tab">Data Transfer</a>
+                </nav>
+                <button onclick="wipeDatabaseAndRescan()" style="background: rgba(255, 23, 68, 0.12); color: var(--accent-error); border: 1px solid rgba(255, 23, 68, 0.3); padding: 0.5rem 0.9rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;">
+                    🗑️ Wipe Old Scans
+                </button>
+                <a href="/logout" class="btn-logout">Logout</a>
+            </div>
+        </header>
+
+        <!-- Top Section -->
+        <section class="top-section">
+            <div class="card">
+                <div class="config-form">
+                    <h3>Scan Controller</h3>
+                    <div class="form-group">
+                        <label for="aws-profile">AWS Profile</label>
+                        <input type="text" id="aws-profile" class="form-control" placeholder="default">
+                    </div>
+                    <div class="form-group">
+                        <label for="aws-region">AWS Region</label>
+                        <input type="text" id="aws-region" class="form-control" placeholder="us-east-1">
+                    </div>
+                    <button id="btn-trigger-scan" class="btn-scan" onclick="triggerScan()">
+                        <span id="btn-text">Trigger S3 Fast Scan</span>
+                    </button>
+                    <div id="scan-status-banner" class="status-container" style="display: none;">
+                        <span id="scan-status-text">Ready</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="kpi-container" style="margin-bottom: 1.5rem;">
+                <div class="card kpi-card">
+                    <span class="kpi-label">Total Buckets</span>
+                    <span id="kpi-total-buckets" class="kpi-value">0</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Total Storage</span>
+                    <span id="kpi-total-size" class="kpi-value" style="color: var(--accent-primary);">0 GB</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">Total Objects</span>
+                    <span id="kpi-total-objects" class="kpi-value" style="color: #b388ff;">0</span>
+                </div>
+                <div class="card kpi-card">
+                    <span class="kpi-label">AWS S3 Invoice Total</span>
+                    <span id="kpi-total-cost" class="kpi-value" style="color: var(--accent-success);">$0.00</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard View -->
+        <div id="dashboard-view">
+            <!-- AWS Billing Cost Explorer S3 Invoice Breakdown -->
+            <section id="s3-billing-breakdown-card" class="card" style="margin-bottom: 1.5rem; display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem;">
+                    <h3 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+                        <span>⚡ AWS S3 Invoice Cost Breakdown</span>
+                        <span style="font-size: 0.75rem; background: rgba(0, 230, 118, 0.15); color: var(--accent-success); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">Verified via AWS Cost Explorer</span>
+                    </h3>
+                    <span id="s3-actual-invoice-total" style="font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--accent-success);">$0.00 / mo</span>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 1rem; border-radius: 10px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">1. API Requests (Tier 1-4)</div>
+                        <div id="s3-cost-api-requests" style="font-size: 1.3rem; font-weight: 700; color: #b388ff; margin-top: 0.3rem;">$0.00</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">PUT, GET, LIST, S3 Select, Glacier Restores</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 1rem; border-radius: 10px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">2. Storage Tiering (GB/mo)</div>
+                        <div id="s3-cost-storage" style="font-size: 1.3rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.3rem;">$0.00</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">Standard, GIR, Deep Archive, Object Overhead</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 1rem; border-radius: 10px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">3. Data Transfer Out (Egress)</div>
+                        <div id="s3-cost-egress" style="font-size: 1.3rem; font-weight: 700; color: #ff8a80; margin-top: 0.3rem;">$0.00</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">Outbound downloads over Internet</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); padding: 1rem; border-radius: 10px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">4. Retrieval & Early Delete</div>
+                        <div id="s3-cost-retrieval" style="font-size: 1.3rem; font-weight: 700; color: #ffd54f; margin-top: 0.3rem;">$0.00</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.2rem;">Glacier early delete penalties & retrieval fees</div>
+                    </div>
+                </div>
+                
+                <div id="s3-regional-container" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; background: rgba(255, 255, 255, 0.02); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Regional S3 Invoice Splitup:</span>
+                    <div id="s3-regional-pills" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+                </div>
+
+                <div style="background: rgba(0, 229, 255, 0.05); border-left: 3px solid var(--accent-primary); padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary);">
+                    💡 <strong>Executive Billing Insights:</strong> Standard S3 storage GB alone accounts for <strong>$<span id="insight-storage-cost">0.00</span></strong>. Non-storage operations (API Requests, Data Transfer Egress, and Glacier Fees) account for the remaining <strong>$<span id="insight-nonstorage-cost">0.00</span></strong> of your actual AWS S3 invoice.
+                </div>
+            </section>
+            <section class="charts-section">
+                <div class="card chart-card">
+                    <h3>Storage Class Breakdown</h3>
+                    <div class="chart-wrapper"><canvas id="scChart"></canvas></div>
+                </div>
+                <div class="card chart-card">
+                    <h3>Top Buckets by Size</h3>
+                    <div class="chart-wrapper"><canvas id="bucketChart"></canvas></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="details-header">
+                    <h2>S3 Bucket Directory</h2>
+                    <div class="controls-row">
+                        <input type="text" id="table-search" class="search-control" placeholder="Search buckets..." oninput="onSearchChange()">
+                        <select id="page-size" class="search-control" style="width: 100px;" onchange="onPageSizeChange()">
+                            <option value="10">10 / page</option>
+                            <option value="25" selected>25 / page</option>
+                            <option value="50">50 / page</option>
+                            <option value="9999">All</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 4%"></th>
+                                <th>Bucket Name</th>
+                                <th>Project</th>
+                                <th>Status</th>
+                                <th>Total Storage</th>
+                                <th>Object Count</th>
+                                <th>Est. Monthly Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+                <div class="pagination-bar">
+                    <span id="page-info">Showing 0-0 of 0 buckets</span>
+                    <div class="pagination-controls">
+                        <button id="btn-prev" class="btn-page" onclick="prevPage()">Prev</button>
+                        <button id="btn-next" class="btn-page" onclick="nextPage()">Next</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        let allBuckets = [];
+        let filteredBuckets = [];
+        let currentPage = 1;
+        let pageSize = 25;
+        let scChartInstance = null;
+        let bucketChartInstance = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadS3Data();
+            checkScanStatus();
+            setInterval(checkScanStatus, 3000);
+        });
+
+        async function loadS3Data(forceRefresh = false) {
+            try {
+                const url = forceRefresh ? '/api/data?nocache=1' : '/api/data';
+                const response = await fetch(url);
+                const result = await response.json();
+                if (result.success) {
+                    renderData(result);
+                    if (result.last_scan_time) {
+                        document.getElementById('main-subtitle').innerHTML = `S3 snapshot date: <strong>${result.last_scan_time}</strong>`;
+                    }
+                }
+            } catch (err) { console.error("Error loading S3 data:", err); }
+        }
+
+        function renderData(data) {
+            allBuckets = data.buckets || [];
+            filteredBuckets = [...allBuckets];
+            
+            const t = data.totals || {};
+            document.getElementById('kpi-total-buckets').textContent = t.total_buckets || allBuckets.length;
+            
+            const szGb = (t.total_size_bytes || 0) / (1024 ** 3);
+            document.getElementById('kpi-total-size').textContent = szGb > 1024 ? (szGb / 1024).toFixed(2) + ' TB' : szGb.toFixed(2) + ' GB';
+            document.getElementById('kpi-total-objects').textContent = (t.total_object_count || 0).toLocaleString();
+            
+            const finalCost = t.aws_billing_total_s3_cost || t.total_monthly_cost || 0;
+            document.getElementById('kpi-total-cost').textContent = '$' + finalCost.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+            if (t.s3_cost_breakdown) {
+                const bd = t.s3_cost_breakdown;
+                document.getElementById('s3-billing-breakdown-card').style.display = 'block';
+                document.getElementById('s3-actual-invoice-total').textContent = '$' + (bd.total_s3_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' / mo';
+                document.getElementById('s3-cost-api-requests').textContent = '$' + (bd.api_request_cost || 0).toFixed(2);
+                document.getElementById('s3-cost-storage').textContent = '$' + (bd.storage_cost || 0).toFixed(2);
+                document.getElementById('s3-cost-egress').textContent = '$' + (bd.data_transfer_cost || 0).toFixed(2);
+                document.getElementById('s3-cost-retrieval').textContent = '$' + (bd.retrieval_early_delete_cost || 0).toFixed(2);
+
+                const nonStorage = (bd.total_s3_cost || 0) - (bd.storage_cost || 0);
+                document.getElementById('insight-storage-cost').textContent = (bd.storage_cost || 0).toFixed(2);
+                document.getElementById('insight-nonstorage-cost').textContent = Math.max(0, nonStorage).toFixed(2);
+            }
+
+            if (t.s3_regional_breakdown) {
+                const regContainer = document.getElementById('s3-regional-pills');
+                regContainer.innerHTML = '';
+                Object.keys(t.s3_regional_breakdown).forEach(regName => {
+                    const regCost = t.s3_regional_breakdown[regName];
+                    const pill = document.createElement('div');
+                    pill.style.cssText = 'background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border-color); padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; color: var(--text-primary);';
+                    pill.innerHTML = `${regName}: <strong style="color: var(--accent-success);">$${regCost.toFixed(2)}</strong>`;
+                    regContainer.appendChild(pill);
+                });
+            }
+
+            renderPage();
+            renderScChart(t.by_storage_class || {});
+            renderBucketChart(allBuckets.slice(0, 5));
+        }
+
+        function renderPage() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, filteredBuckets.length);
+            const pageData = filteredBuckets.slice(startIdx, endIdx);
+
+            pageData.forEach((b, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'inst-row';
+                tr.id = `b-row-${index}`;
+                tr.onclick = () => toggleRowDetails(index);
+
+                const szGb = (b.total_size_bytes || 0) / (1024 ** 3);
+                const szStr = szGb > 1024 ? (szGb / 1024).toFixed(2) + ' TB' : szGb.toFixed(2) + ' GB';
+                const statusBadge = b.status === 'OK' ? '<span style="color: var(--accent-success); font-weight:700;">OK</span>' : '<span style="color: var(--accent-error); font-weight:700;">' + b.status + '</span>';
+                const projBadge = `<span style="background: rgba(124, 77, 255, 0.15); color: #b388ff; border: 1px solid rgba(124, 77, 255, 0.3); padding: 0.2rem 0.5rem; border-radius: 6px; font-weight: 600; font-size: 0.8rem;">${b.project || 'Core / Shared'}</span>`;
+
+                tr.innerHTML = `
+                    <td><span class="expand-arrow" id="arrow-${index}">▶</span></td>
+                    <td><strong>${b.name}</strong></td>
+                    <td>${projBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td>${szStr}</td>
+                    <td>${(b.total_object_count || 0).toLocaleString()}</td>
+                    <td><strong style="color: var(--accent-primary);">$${(b.total_monthly_cost || 0).toFixed(2)}</strong></td>
+                `;
+                tbody.appendChild(tr);
+
+                // Expandable Details Row
+                const detailsRow = document.createElement('tr');
+                detailsRow.className = 'details-row';
+                detailsRow.id = `details-row-${index}`;
+
+                let scCards = '';
+                const classes = b.storage_classes || {};
+                Object.keys(classes).forEach(scName => {
+                    const scInfo = classes[scName];
+                    const scGb = (scInfo.size_bytes || 0) / (1024 ** 3);
+                    const scSzStr = scGb > 1024 ? (scGb / 1024).toFixed(2) + ' TB' : scGb.toFixed(2) + ' GB';
+                    scCards += `
+                        <div class="sc-card">
+                            <div class="sc-name">${scName}</div>
+                            <div class="sc-val"><strong>${scSzStr}</strong> (${(scInfo.object_count || 0).toLocaleString()} objs)</div>
+                            <div class="sc-val" style="color: var(--accent-primary);">$${(scInfo.monthly_cost || 0).toFixed(2)} / mo</div>
+                        </div>
+                    `;
+                });
+
+                detailsRow.innerHTML = `
+                    <td colspan="6">
+                        <div class="details-expanded">
+                            <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem; text-transform: uppercase; color: var(--text-secondary);">Storage Class Tiering Breakdown</h4>
+                            <div class="sc-grid">${scCards || '<p style="color:var(--text-secondary);">No storage class breakdown available.</p>'}</div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailsRow);
+            });
+
+            document.getElementById('page-info').textContent = `Showing ${filteredBuckets.length ? startIdx + 1 : 0}-${endIdx} of ${filteredBuckets.length} buckets`;
+            document.getElementById('btn-prev').disabled = currentPage === 1;
+            document.getElementById('btn-next').disabled = endIdx >= filteredBuckets.length;
+        }
+
+        function toggleRowDetails(index) {
+            const row = document.getElementById(`b-row-${index}`);
+            const details = document.getElementById(`details-row-${index}`);
+            const isActive = details.classList.contains('active');
+            if (isActive) {
+                details.classList.remove('active');
+                row.classList.remove('expanded');
+            } else {
+                details.classList.add('active');
+                row.classList.add('expanded');
+            }
+        }
+
+        function onSearchChange() {
+            const q = document.getElementById('table-search').value.toLowerCase();
+            filteredBuckets = allBuckets.filter(b => b.name.toLowerCase().includes(q));
+            currentPage = 1;
+            renderPage();
+        }
+
+        function onPageSizeChange() { pageSize = parseInt(document.getElementById('page-size').value); currentPage = 1; renderPage(); }
+        function prevPage() { if (currentPage > 1) { currentPage--; renderPage(); } }
+        function nextPage() { if ((currentPage * pageSize) < filteredBuckets.length) { currentPage++; renderPage(); } }
+
+        function renderScChart(scData) {
+            const ctx = document.getElementById('scChart').getContext('2d');
+            if (scChartInstance) scChartInstance.destroy();
+            const labels = Object.keys(scData);
+            const values = Object.values(scData).map(v => (v.size_bytes / (1024**3)).toFixed(2));
+            const colors = ['#00f2fe', '#b388ff', '#00e676', '#ffb300', '#ff8a80', '#e2e8f0'];
+
+            scChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 1, borderColor: '#0b0c10' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#e2e8f0' } } }, cutout: '65%' }
+            });
+        }
+
+        function renderBucketChart(topBuckets) {
+            const ctx = document.getElementById('bucketChart').getContext('2d');
+            if (bucketChartInstance) bucketChartInstance.destroy();
+            const labels = topBuckets.map(b => b.name);
+            const values = topBuckets.map(b => (b.total_size_bytes / (1024**3)).toFixed(2));
+
+            bucketChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ label: 'Size (GB)', data: values, backgroundColor: 'rgba(0, 242, 254, 0.45)', borderColor: 'rgba(0, 242, 254, 1)', borderWidth: 1.5, borderRadius: 6 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#a0aec0' } }, y: { ticks: { color: '#a0aec0' } } }, plugins: { legend: { display: false } } }
+            });
+        }
+
+        async function triggerScan() {
+            const btn = document.getElementById('btn-trigger-scan');
+            const profile = document.getElementById('aws-profile').value;
+            const region = document.getElementById('aws-region').value;
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> <span>Running S3 Scan...</span>';
+
+            try {
+                const response = await fetch('/api/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profile: profile || null, region: region || null })
+                });
+                const result = await response.json();
+                if (result.success) checkScanStatus();
+                else { alert("Scan failed: " + result.message); resetScanButton(); }
+            } catch (err) { console.error("Error triggering scan:", err); resetScanButton(); }
+        }
+
+        async function checkScanStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                const banner = document.getElementById('scan-status-banner');
+                const text = document.getElementById('scan-status-text');
+                const btn = document.getElementById('btn-trigger-scan');
+
+                if (status.is_running) {
+                    banner.style.display = 'block';
+                    banner.className = 'status-container status-running';
+                    text.textContent = status.message;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner"></span> <span>Scanning AWS...</span>';
+                } else {
+                    if (status.last_run) {
+                        banner.style.display = 'block';
+                        banner.className = 'status-container';
+                        if (status.error) {
+                            banner.classList.add('status-error');
+                            text.textContent = status.message + " Error: " + status.error;
+                        } else {
+                            text.innerHTML = `Last completed scan: <strong>${status.last_run}</strong>`;
+                        }
+                    } else {
+                        banner.style.display = 'none';
+                    }
+
+                    if (btn.innerHTML.includes('spinner')) {
+                        resetScanButton();
+                        sessionStorage.removeItem('s3_data_cache');
+                        loadS3Data(true);
+                    }
+                }
+            } catch (err) { console.error("Error checking status:", err); }
+        }
+
+        function resetScanButton() {
+            const btn = document.getElementById('btn-trigger-scan');
+            btn.disabled = false;
+            btn.innerHTML = '<span>Trigger S3 Fast Scan</span>';
+        }
+    </script>
+    <script src="/static/js/sync_reconciler.js"></script>
+    <script src="/static/js/session_timeout.js"></script>
+</body>
+</html>

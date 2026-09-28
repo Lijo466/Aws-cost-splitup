@@ -1,0 +1,49 @@
+services:
+  aws-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aws-dashboard:latest
+    container_name: aws-dashboard
+
+    # Load environment variables from .env file if available
+    env_file:
+      - .env
+
+    ports:
+      - "${FLASK_PORT:-5000}:${FLASK_PORT:-5000}"
+
+    volumes:
+      # Persist SQLite database and scan history across container restarts
+      - app_data:/app/data
+      # Optional: Mount local AWS credentials file (uncomment if using ~/.aws credentials)
+      # - ~/.aws:/home/appuser/.aws:ro
+
+    restart: unless-stopped
+
+    # Drop all Linux capabilities for container security
+    cap_drop:
+      - ALL
+
+    # Prevent the container from gaining new privileges
+    security_opt:
+      - no-new-privileges:true
+
+    # Read-only root filesystem — only mounted volume and tmpfs are writable
+    read_only: true
+
+    # Writable tmpfs mounts required by Gunicorn and Python runtime
+    tmpfs:
+      - /tmp
+      - /app/__pycache__
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${FLASK_PORT:-5000}/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  app_data:
+    driver: local
