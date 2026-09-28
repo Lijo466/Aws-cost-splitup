@@ -1,0 +1,114 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install flake8
+      - run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  build-test:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "IMAGE_LC=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_LC }}:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE_LC }}:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Smoke test /health
+        run: |
+          docker run -d --name smoke -p 5000:5000 \
+            -e FLASK_PORT=5000 \
+            -e DASHBOARD_USERNAME=ci \
+            -e DASHBOARD_PASSWORD=ci-smoke-pw \
+            "${{ env.IMAGE_LC }}:ci"
+          ok=0
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5000/health > /dev/null && { ok=1; break; }
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            docker logs smoke --tail 50
+            docker rm -f smoke
+            exit 1
+          fi
+          curl -s http://localhost:5000/health
+          docker rm -f smoke
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "IMAGE_LC=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_LC }}:latest
+            ${{ env.IMAGE_LC }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deploy to Lightsail over SSH
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          SSH_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          SSH_USER: ${{ secrets.LIGHTSAIL_USER }}
+          SSH_PORT: ${{ secrets.LIGHTSAIL_PORT }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SSH_PORT="${SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          TARGET="$SSH_USER@$SSH_HOST"
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o IdentitiesOnly=yes "$TARGET" "mkdir -p /opt/aws-dashboard/scripts"
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" docker-compose.prod.yml "$TARGET:/opt/aws-dashboard/"
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" scripts/deploy.sh "$TARGET:/opt/aws-dashboard/scripts/"
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" -o IdentitiesOnly=yes "$TARGET" \
+            "cd /opt/aws-dashboard && GHCR_USER=${{ github.actor }} GHCR_TOKEN=\$(cat) bash scripts/deploy.sh ${{ github.sha }}"
